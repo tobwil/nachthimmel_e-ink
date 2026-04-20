@@ -1,0 +1,13 @@
+[Unit]
+Description=Nachthimmel Coburg Web-UI
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/zero/e-Paper/RaspberryPi_JetsonNano/python/examples/webui.py
+WorkingDirectory=/home/zero/e-Paper/RaspberryPi_JetsonNano/python/examples
+Restart=always
+RestartSec=10
+User=zero
+
+[Install]
+WantedBy=multi-user.target
