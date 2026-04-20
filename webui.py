@@ -4,11 +4,12 @@ Nachthimmel Coburg — Web-UI mit Karte, KP-Chart, Status-Indikatoren
 """
 import sys, os, json, logging, time
 from datetime import datetime
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import nachthimmel as _nm
 from nachthimmel import (get_sky_data, get_kp_data, get_dwd_warnings,
-                          LAT, LON, KP_COBURG_THRESHOLD, PI_IP, WEBUI_PORT)
+                          KP_COBURG_THRESHOLD, PI_IP, WEBUI_PORT)
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
@@ -184,7 +185,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;
     </div>
     <div class="card-value" style="font-size:20px">{{ d.sky.moon_phase }}%</div>
     <div class="card-sub">
-      ↑ {{ d.sky.moon_rise }} &nbsp;↓ {{ d.sky.moon_set }}
+      ↑ {{ d.sky.moon_rise }} &nbsp;↓ {{ d.sky.moon_set }}{% if d.sky.moon_set_next_day %}<span style="font-size:9px;opacity:.6"> +1</span>{% endif %}
     </div>
   </div>
 </div>
@@ -231,13 +232,30 @@ footer{text-align:center;color:var(--muted);font-size:11px;
   <div class="time-row"><span class="tl">Astronomische Dämmerung</span><span class="tv">{{ d.sky.astro_dark_start }}</span></div>
   <div class="time-row"><span class="tl">Astronomischer Morgen</span><span class="tv">{{ d.sky.astro_dark_end }}</span></div>
   <div class="time-row"><span class="tl">Mondaufgang</span><span class="tv">{{ d.sky.moon_rise }}</span></div>
-  <div class="time-row"><span class="tl">Monduntergang</span><span class="tv">{{ d.sky.moon_set }}</span></div>
+  <div class="time-row"><span class="tl">Monduntergang</span><span class="tv">{{ d.sky.moon_set }}{% if d.sky.moon_set_next_day %} <span style="font-size:10px;opacity:.55">+1 Tag</span>{% endif %}</span></div>
   <div class="time-row"><span class="tl">KP-Schwelle Coburg</span><span class="tv">KP {{ threshold }}+</span></div>
 </div>
 
 <!-- OpenStreetMap -->
 <div class="card" style="margin-bottom:10px">
-  <div class="card-label" style="margin-bottom:10px">Standort · Coburg 7W3C+63</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div class="card-label" style="margin-bottom:0">Standort · {{ "%.4f"|format(cur_lat) }}°N · {{ "%.4f"|format(cur_lon) }}°E</div>
+    <button id="pick-btn" onclick="togglePickMode()"
+      style="font-size:11px;padding:4px 10px;background:var(--surface);border:1px solid var(--border);
+             color:var(--text);border-radius:99px;cursor:pointer;white-space:nowrap;">
+      Standort ändern
+    </button>
+  </div>
+  <div id="pick-info" style="display:none;align-items:center;gap:8px;font-size:11px;
+       color:var(--accent);margin-bottom:8px;flex-wrap:wrap;">
+    <span>Auf Karte klicken →</span>
+    <span id="new-coords" style="font-weight:500">–</span>
+    <button id="save-btn" onclick="saveLocation()"
+      style="display:none;font-size:11px;padding:3px 10px;background:var(--green);
+             color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+      Übernehmen
+    </button>
+  </div>
   <div id="map"></div>
   <div style="font-size:10px;color:var(--muted);margin-top:6px">
     Dunkelste Beobachtungsgebiete: Frankenwald (N), Hassberge (SW)
@@ -266,31 +284,62 @@ footer{text-align:center;color:var(--muted);font-size:11px;
 </div>
 
 <script>
-// Leaflet Karte mit dunklem Tile-Layer
+var curLat = {{ cur_lat }}, curLon = {{ cur_lon }};
+var pickMode = false, newLat = null, newLon = null;
+
 var map = L.map('map', {zoomControl:true, scrollWheelZoom:false})
-  .setView([50.2611, 10.9639], 10);
+  .setView([curLat, curLon], 10);
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution:'&copy; OpenStreetMap &copy; CARTO',
-  maxZoom:18
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:18
 }).addTo(map);
 
-// Coburg Marker
 var icon = L.divIcon({
   html: '<div style="width:12px;height:12px;background:#4fc3f7;border-radius:50%;'
       + 'border:2px solid #fff;box-shadow:0 0 8px #4fc3f7"></div>',
   iconSize:[12,12], iconAnchor:[6,6], className:''
 });
-L.marker([50.2611, 10.9639], {icon:icon})
+var marker = L.marker([curLat, curLon], {icon:icon})
   .addTo(map)
-  .bindPopup('<b>Coburg</b><br>7W3C+63<br>50.2611°N · 10.9639°E')
+  .bindPopup('<b>Standort</b><br>' + curLat.toFixed(4) + '°N · ' + curLon.toFixed(4) + '°E')
   .openPopup();
 
-// Ungefährer Sichtbarkeitsradius (Symbolisch 50km)
-L.circle([50.2611, 10.9639], {
+L.circle([curLat, curLon], {
   radius:50000, color:'#4fc3f7', fillColor:'#4fc3f7',
   fillOpacity:0.05, weight:1, dashArray:'4 4'
 }).addTo(map);
+
+function togglePickMode() {
+  pickMode = !pickMode;
+  document.getElementById('pick-btn').textContent = pickMode ? '✕ Abbrechen' : 'Standort ändern';
+  document.getElementById('pick-info').style.display = pickMode ? 'flex' : 'none';
+  document.getElementById('save-btn').style.display = 'none';
+  document.getElementById('new-coords').textContent = '–';
+  newLat = null; newLon = null;
+}
+
+map.on('click', function(e) {
+  if (!pickMode) return;
+  newLat = e.latlng.lat; newLon = e.latlng.lng;
+  marker.setLatLng(e.latlng);
+  marker.setPopupContent('<b>Neuer Standort</b><br>'
+    + newLat.toFixed(4) + '°N · ' + newLon.toFixed(4) + '°E').openPopup();
+  document.getElementById('new-coords').textContent =
+    newLat.toFixed(4) + '°N, ' + newLon.toFixed(4) + '°E';
+  document.getElementById('save-btn').style.display = 'inline-block';
+});
+
+function saveLocation() {
+  if (newLat === null) return;
+  fetch('/api/location', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({lat: newLat, lon: newLon})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) location.reload();
+    else alert('Fehler beim Speichern');
+  }).catch(e => alert('Netzwerkfehler: ' + e));
+}
 </script>
 </body>
 </html>'''
@@ -299,12 +348,27 @@ L.circle([50.2611, 10.9639], {
 @app.route("/")
 def index():
     d = get_all_data()
-    return render_template_string(HTML, d=d, threshold=KP_COBURG_THRESHOLD)
+    return render_template_string(HTML, d=d, threshold=KP_COBURG_THRESHOLD,
+                                   cur_lat=float(_nm.LAT), cur_lon=float(_nm.LON))
 
 
 @app.route("/api")
 def api():
     return json.dumps(get_all_data(), default=str), 200, {'Content-Type': 'application/json'}
+
+
+@app.route("/api/location", methods=["POST"])
+def set_location():
+    data = request.get_json()
+    lat = round(float(data["lat"]), 6)
+    lon = round(float(data["lon"]), 6)
+    _nm.LAT = str(lat)
+    _nm.LON = str(lon)
+    with open(_nm.CONFIG_FILE, "w") as f:
+        json.dump({"lat": lat, "lon": lon}, f)
+    global _cache_ts
+    _cache_ts = 0
+    return jsonify({"ok": True, "lat": lat, "lon": lon})
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 Nachthimmel Coburg — E-Ink Display
 Waveshare 2.13" V4, Pi Zero 2W
 """
-import sys, os, math, time, logging, requests, calendar
+import sys, os, math, time, logging, requests, calendar, json
 from datetime import datetime
 import ephem
 from PIL import Image, ImageDraw, ImageFont
@@ -26,6 +26,21 @@ WEBUI_PORT = 5001
 KP_URL   = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 DWD_URL  = "https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json"
 KP_COBURG_THRESHOLD = 6
+
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.json')
+
+def _load_config():
+    global LAT, LON
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+            if "lat" in cfg: LAT = str(cfg["lat"])
+            if "lon" in cfg: LON = str(cfg["lon"])
+        except Exception:
+            pass
+
+_load_config()
 
 FONT_BOLD   = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_NORMAL = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -77,22 +92,25 @@ def get_sky_data():
     mw_visible = moon_phase < 50 and is_night
 
     # Mondauf/-untergang im 24h-Format
+    moon_set_next_day = False
     try:
         moon_rise_local = utc_to_local(ephem.Date(obs.next_rising(moon)).datetime())
         moon_set_local  = utc_to_local(ephem.Date(obs.next_setting(moon)).datetime())
+        moon_set_next_day = moon_set_local.date() > moon_rise_local.date()
         moon_rise_str   = moon_rise_local.strftime("%H:%M")
         moon_set_str    = moon_set_local.strftime("%H:%M")
     except Exception:
         moon_rise_str = moon_set_str = "--:--"
 
     return {
-        "moon_phase":       moon_phase,
-        "mw_visible":       mw_visible,
-        "is_night":         is_night,
-        "astro_dark_start": astro_set_str,
-        "astro_dark_end":   astro_rise_str,
-        "moon_rise":        moon_rise_str,
-        "moon_set":         moon_set_str,
+        "moon_phase":        moon_phase,
+        "mw_visible":        mw_visible,
+        "is_night":          is_night,
+        "astro_dark_start":  astro_set_str,
+        "astro_dark_end":    astro_rise_str,
+        "moon_rise":         moon_rise_str,
+        "moon_set":          moon_set_str,
+        "moon_set_next_day": moon_set_next_day,
     }
 
 
