@@ -3,8 +3,8 @@ Description=Nachthimmel Coburg Web-UI
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/zero/e-Paper/RaspberryPi_JetsonNano/python/examples/webui.py
-WorkingDirectory=/home/zero/e-Paper/RaspberryPi_JetsonNano/python/examples
+ExecStart=/usr/bin/python3 /home/zero/nachthimmel_e-ink/webui.py
+WorkingDirectory=/home/zero/nachthimmel_e-ink
 Restart=always
 RestartSec=10
 User=zero
