@@ -95,7 +95,9 @@ def get_sky_data():
     moon_set_next_day = False
     try:
         midnight_local  = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        midnight_utc_dt = datetime.utcfromtimestamp(time.mktime(midnight_local.timetuple()))
+        from datetime import timezone as _tz
+        midnight_utc_dt = datetime.fromtimestamp(
+            time.mktime(midnight_local.timetuple()), tz=_tz.utc).replace(tzinfo=None)
         obs_mid = ephem.Observer()
         obs_mid.lat = obs.lat; obs_mid.lon = obs.lon
         obs_mid.elevation = obs.elevation; obs_mid.pressure = 0
@@ -271,7 +273,8 @@ def update_display(img):
         logging.info("Display aktualisiert.")
     except ImportError:
         img.save("/tmp/nachthimmel_preview.png")
-        logging.warning("waveshare_epd nicht gefunden — lib/ fehlt oder SPI nicht aktiviert.")
+        logging.warning(f"waveshare_epd nicht gefunden — gesucht in: {libdir}")
+        logging.warning("→ Waveshare-Library unter diesem Pfad ablegen oder SPI prüfen (raspi-config).")
         logging.info("Vorschau: /tmp/nachthimmel_preview.png")
     except Exception as e:
         img.save("/tmp/nachthimmel_preview.png")
