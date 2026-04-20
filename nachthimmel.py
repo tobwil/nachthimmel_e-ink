@@ -10,6 +10,16 @@ from PIL import Image, ImageDraw, ImageFont
 import qrcode
 
 libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
+# Falls nicht gefunden, Standard-Waveshare-Pfade durchsuchen
+if not os.path.exists(os.path.join(libdir, 'waveshare_epd')):
+    for _candidate in [
+        os.path.expanduser('~/e-Paper/RaspberryPi_JetsonNano/python/lib'),
+        os.path.expanduser('~/waveshare/lib'),
+        os.path.expanduser('~/lib'),
+    ]:
+        if os.path.exists(os.path.join(_candidate, 'waveshare_epd')):
+            libdir = _candidate
+            break
 if os.path.exists(libdir):
     sys.path.append(libdir)
 
