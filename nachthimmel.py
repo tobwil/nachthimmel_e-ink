@@ -91,15 +91,22 @@ def get_sky_data():
     is_night = float(sun2.alt) < math.radians(-18)
     mw_visible = moon_phase < 50 and is_night
 
-    # Mondauf/-untergang im 24h-Format
+    # Mondauf/-untergang — ab heutigem Mitternacht berechnen, nicht ab "jetzt"
     moon_set_next_day = False
     try:
-        moon_rise_local = utc_to_local(ephem.Date(obs.next_rising(moon)).datetime())
-        moon_set_local  = utc_to_local(ephem.Date(obs.next_setting(moon)).datetime())
+        midnight_local  = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight_utc_dt = datetime.utcfromtimestamp(time.mktime(midnight_local.timetuple()))
+        obs_mid = ephem.Observer()
+        obs_mid.lat = obs.lat; obs_mid.lon = obs.lon
+        obs_mid.elevation = obs.elevation; obs_mid.pressure = 0
+        obs_mid.date = ephem.Date(midnight_utc_dt)
+        moon_rise_local = utc_to_local(ephem.Date(obs_mid.next_rising(moon)).datetime())
+        moon_set_local  = utc_to_local(ephem.Date(obs_mid.next_setting(moon)).datetime())
         moon_set_next_day = moon_set_local.date() > moon_rise_local.date()
         moon_rise_str   = moon_rise_local.strftime("%H:%M")
         moon_set_str    = moon_set_local.strftime("%H:%M")
-    except Exception:
+    except Exception as e:
+        logging.warning(f"Mondzeit-Fehler: {e}")
         moon_rise_str = moon_set_str = "--:--"
 
     return {
@@ -264,10 +271,12 @@ def update_display(img):
         logging.info("Display aktualisiert.")
     except ImportError:
         img.save("/tmp/nachthimmel_preview.png")
-        logging.info("Preview: /tmp/nachthimmel_preview.png")
+        logging.warning("waveshare_epd nicht gefunden — lib/ fehlt oder SPI nicht aktiviert.")
+        logging.info("Vorschau: /tmp/nachthimmel_preview.png")
     except Exception as e:
         img.save("/tmp/nachthimmel_preview.png")
         logging.error(f"Display-Fehler: {e}")
+        logging.info("Vorschau: /tmp/nachthimmel_preview.png")
 
 
 def main():

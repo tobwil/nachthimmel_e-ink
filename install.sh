@@ -15,7 +15,7 @@ echo "IP in Skripten eingetragen."
 sudo cp "$(dirname "$0")/nachthimmel-webui.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable nachthimmel-webui
-sudo systemctl start nachthimmel-webui
+sudo systemctl restart nachthimmel-webui
 
 # Cron alle 20 Min
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
