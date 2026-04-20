@@ -118,21 +118,19 @@ def get_sky_data():
 
 def get_kp_data():
     """
-    noaa-planetary-k-index.json Format:
-    [ ["time_tag", "Kp", ...], ["2026-04-20 00:00:00", "1.33", ...], ... ]
-    Erste Zeile = Header, Rest = Daten
+    noaa-planetary-k-index.json Format (aktuell):
+    [ {"time_tag": "2026-04-13T00:00:00", "Kp": 0.67, ...}, ... ]
     """
     try:
         r = requests.get(KP_URL, timeout=10,
             headers={"User-Agent": "Mozilla/5.0"})
         r.raise_for_status()
         data = r.json()
-        # Erste Zeile überspringen (Header)
-        rows = [row for row in data[1:] if row[1] not in (None, "")]
+        rows = [row for row in data if row.get("Kp") is not None]
         if not rows:
             return {"kp": None, "history": [], "status": "no_data"}
-        kp_now = float(rows[-1][1])
-        history = [(row[0], float(row[1])) for row in rows[-16:]]  # letzte 48h (16 × 3h)
+        kp_now = float(rows[-1]["Kp"])
+        history = [(row["time_tag"], float(row["Kp"])) for row in rows[-16:]]
         return {"kp": kp_now, "history": history, "status": "ok"}
     except Exception as e:
         logging.warning(f"KP-Fehler: {e}")
